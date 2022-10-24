@@ -29,7 +29,7 @@ var file = "/etc/config"
 
 var show = `
 create config like this
-k@k-ThinkPad-P15-Gen-1:~$ cat /etc/config/koiq
+k@k-ThinkPad-P15-Gen-1:~$ cat /etc/config/koiAliddns
 config cron
     #At every 20th minute
     option time "0 */20 * * * *"
@@ -78,12 +78,12 @@ func parseFlags() *Flags {
 
 func (i *NewUCI) GetAKSK() (AKSK, error) {
 	var aksk AKSK
-	if vaule, ok := i.UCI.Get("koiq", "@auth[0]", "ak"); ok {
+	if vaule, ok := i.UCI.Get("koiAliddns", "@auth[0]", "ak"); ok {
 		aksk.AK = vaule[0]
 	} else {
 		return aksk, errors.New("auth section null")
 	}
-	if vaule, ok := i.UCI.Get("koiq", "@auth[0]", "sk"); ok {
+	if vaule, ok := i.UCI.Get("koiAliddns", "@auth[0]", "sk"); ok {
 		aksk.SK = vaule[0]
 	} else {
 		return aksk, errors.New("auth section null")
@@ -94,38 +94,38 @@ func (i *NewUCI) GetAKSK() (AKSK, error) {
 func (i *NewUCI) GetHosts() (map[string][]Hosts, error) {
 	hosts := make(map[string][]Hosts)
 
-	sections, ok := i.UCI.GetSections("koiq", "host")
+	sections, ok := i.UCI.GetSections("koiAliddns", "host")
 	if !ok {
 		return hosts, errors.New("get sections error")
 	}
 	for _, section := range sections {
 		var host Hosts
-		if val, ok := i.UCI.Get("koiq", section, "rr"); ok {
+		if val, ok := i.UCI.Get("koiAliddns", section, "rr"); ok {
 			host.RR = val[0]
 		} else {
 			return hosts, errors.New("get pr record error")
 		}
-		if val, ok := i.UCI.Get("koiq", section, "type"); ok {
+		if val, ok := i.UCI.Get("koiAliddns", section, "type"); ok {
 			host.TYPE = val[0]
 		} else {
 			return hosts, errors.New("get pr record error")
 		}
-		if val, ok := i.UCI.Get("koiq", section, "ttl"); ok {
+		if val, ok := i.UCI.Get("koiAliddns", section, "ttl"); ok {
 			host.TTL, _ = strconv.Atoi(val[0])
 		} else {
 			return hosts, errors.New("get ttl record error")
 		}
-		if val, ok := i.UCI.Get("koiq", section, "priority"); ok {
+		if val, ok := i.UCI.Get("koiAliddns", section, "priority"); ok {
 			host.PRIORITY, _ = strconv.Atoi(val[0])
 		} else {
 			return hosts, errors.New("get priority record error")
 		}
-		if val, ok := i.UCI.Get("koiq", section, "line"); ok {
+		if val, ok := i.UCI.Get("koiAliddns", section, "line"); ok {
 			host.LINE = val[0]
 		} else {
 			return hosts, errors.New("get line record error")
 		}
-		if val, ok := i.UCI.Get("koiq", section, "domain"); ok {
+		if val, ok := i.UCI.Get("koiAliddns", section, "domain"); ok {
 			host.DOMAIN = val[0]
 		} else {
 			return hosts, errors.New("get domain record error")
