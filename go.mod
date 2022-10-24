@@ -1,4 +1,4 @@
-module koiAliddns
+module github.com/imwxx/koiAliddns
 
 go 1.18
 
