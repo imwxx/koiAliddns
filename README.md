@@ -1,10 +1,10 @@
-# koiAliddns
+# 1.koiAliddns
 
 - **What**: Dynamic DNS Client scripts for Ali DNS, just support IPv4, config was suitable for OpenWRT
 - **Cron**: Application running by 5Min each time
 
-# How
-## config
+# 2.How
+## 2.1.config
 ```
 #create config like this
 #k@k-ThinkPad-P15-Gen-1:~$ cat /etc/config/koiq
@@ -21,7 +21,8 @@ config host
     option domain "wuxuxing.com"
 
 ```
-## run
+
+## 2.2.run
 ```
 /usr/bin/koiAliddns -f /etc/config
 ```
