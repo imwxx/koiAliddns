@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
@@ -71,7 +70,7 @@ type NewUCI struct {
 func parseFlags() *Flags {
 	argsflag := new(Flags)
 	flag.StringVar(&argsflag.file, "f", file, "config dir, default /etc/config")
-	flag.StringVar(&argsflag.file, "s", show, "show config demo")
+	flag.StringVar(&argsflag.show, "s", show, "show config demo")
 	flag.Parse()
 	return argsflag
 }
