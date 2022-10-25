@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -30,7 +32,10 @@ var file = "/etc/config"
 
 var show = `
 config koiAliddns
-    option enabled "1"
+        option enabled '1'
+		# 指定被获取IP的网卡地址，非必须；没配置的话，走http://myip.ipip.net/json
+        # option eth "enp0s31f6"
+        option ipv46 "ipv4"
 
 config auth
 	option ak "xxxxxxxxxxxx"
@@ -53,6 +58,14 @@ config host
 	option domain "wuxuxing.com"
 `
 
+type MyipipipNet struct {
+	Ret  string `json:"ret"`
+	Data struct {
+		Ip       string   `json:"ip"`
+		Location []string `json:"location"`
+	} `json:"data"`
+}
+
 type Hosts struct {
 	RR       string
 	TYPE     string
@@ -64,14 +77,20 @@ type Hosts struct {
 	VALUE    string
 }
 
+type KoiAliDdns struct {
+	Enabled bool
+	Eth     string
+	Myipapi string
+	Ipv46   string
+}
+
 type AKSK struct {
 	AK string
 	SK string
 }
 
 type NewUCI struct {
-	WANIP string
-	UCI   uci.Tree
+	UCI uci.Tree
 }
 
 func parseFlags() *Flags {
@@ -82,7 +101,8 @@ func parseFlags() *Flags {
 	return argsflag
 }
 
-func (i *NewUCI) AppEnabled() {
+func (i *NewUCI) GetKoiAliDdns() (KoiAliDdns, error) {
+	var data KoiAliDdns
 	var enabled bool
 	if value, ok := i.UCI.Get("koiAliddns", "@koiAliddns[0]", "enabled"); ok {
 		e, _ := strconv.Atoi(value[0])
@@ -94,11 +114,30 @@ func (i *NewUCI) AppEnabled() {
 	} else {
 		enabled = false
 	}
+	data.Enabled = enabled
 
-	if enabled == false {
-		logger.Error("app was not able to running, change the config")
-		os.Exit(1)
+	if value, ok := i.UCI.Get("koiAliddns", "@koiAliddns[0]", "eth"); ok {
+		if len(value) > 0 {
+			data.Eth = value[0]
+		} else {
+			data.Myipapi = "http://myip.ipip.net/json"
+		}
+	} else {
+		data.Myipapi = "http://myip.ipip.net/json"
 	}
+
+	if value, ok := i.UCI.Get("koiAliddns", "@koiAliddns[0]", "ipv46"); ok {
+		data.Ipv46 = value[0]
+		if len(value) > 0 {
+			data.Ipv46 = value[0]
+		} else {
+			data.Ipv46 = "ipv4"
+		}
+	} else {
+		data.Ipv46 = "ipv4"
+	}
+
+	return data, nil
 }
 
 func (i *NewUCI) GetAKSK() (AKSK, error) {
@@ -164,6 +203,74 @@ func (i *NewUCI) GetHosts() (map[string][]Hosts, error) {
 	return hosts, nil
 }
 
+func (i *NewUCI) GetwanIP(koialiddns KoiAliDdns) (map[string]string, error) {
+	wanIp := map[string]string{
+		"ipv4": "",
+		"ipv6": "",
+	}
+
+	if koialiddns.Eth != "" {
+		ifaces, _ := net.Interfaces()
+		for _, i := range ifaces {
+			if i.Name == koialiddns.Eth {
+				addrs, _ := i.Addrs()
+				for _, addr := range addrs {
+					var ip net.IP
+					switch v := addr.(type) {
+					case *net.IPNet:
+						ip = v.IP
+					case *net.IPAddr:
+						ip = v.IP
+					}
+
+					v4 := strings.Split(ip.String(), ".")
+					if len(v4) > 1 {
+						wanIp["ipv4"] = ip.String()
+					}
+
+					v6 := strings.Split(ip.String(), ":")
+					if len(v6) > 1 {
+						wanIp["ipv6"] = ip.String()
+					}
+
+				}
+			}
+		}
+	} else {
+		client := &http.Client{}
+		req, _ := http.NewRequest("GET", koialiddns.Myipapi, nil)
+
+		var myip string
+		resp, err := client.Do(req)
+		if err != nil {
+			return wanIp, err
+		}
+		re, _ := ioutil.ReadAll(resp.Body)
+
+		if resp.StatusCode != 200 {
+			logger.Warn("Invalid request: ", string(re))
+			return wanIp, errors.New(string(re))
+		} else {
+			var b MyipipipNet
+			if err := json.Unmarshal(re, &b); err != nil {
+				return wanIp, err
+			}
+			myip = b.Data.Ip
+		}
+
+		v4 := strings.Split(string(myip), ".")
+		if len(v4) > 0 {
+			wanIp["ipv4"] = string(myip)
+		}
+
+		v6 := strings.Split(string(myip), ":")
+		if len(v6) > 0 {
+			wanIp["ipv6"] = string(myip)
+		}
+	}
+
+	return wanIp, nil
+}
 func (i *NewUCI) HostsHandler() ([]Hosts, []Hosts, error) {
 	hostRecords := make(map[string]map[string]alidns.Record)
 	data, err := i.GetHosts()
@@ -172,10 +279,19 @@ func (i *NewUCI) HostsHandler() ([]Hosts, []Hosts, error) {
 		return uHosts, aHosts, err
 	}
 
+	koialiddns, err := i.GetKoiAliDdns()
+	if err != nil {
+		return uHosts, aHosts, err
+	}
+
+	wanIp, err := i.GetwanIP(koialiddns)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	aksk, err := i.GetAKSK()
 	if err != nil {
 		return uHosts, aHosts, err
-
 	}
 
 	aliClient := AKSK{
@@ -191,16 +307,21 @@ func (i *NewUCI) HostsHandler() ([]Hosts, []Hosts, error) {
 		hostRecords[domain] = res[domain]
 	}
 
+	var wanip string
+
+	if v, ok := wanIp[koialiddns.Ipv46]; ok {
+		wanip = v
+	}
 	for host, infos := range data {
 		for _, info := range infos {
 			if record, ok := hostRecords[host][info.RR]; ok {
-				if record.Value != i.WANIP {
+				if record.Value != wanip {
 					info.RECORDID = record.RecordId
-					info.VALUE = i.WANIP
+					info.VALUE = wanip
 					uHosts = append(uHosts, info)
 				}
 			} else {
-				info.VALUE = i.WANIP
+				info.VALUE = wanip
 				aHosts = append(aHosts, info)
 			}
 		}
@@ -327,30 +448,18 @@ func (i *AKSK) AddDNS(hosts []Hosts) (err error) {
 	return nil
 }
 
-func GetwanIP() (string, error) {
-	var wanIp string
-	client := &http.Client{}
-	req, _ := http.NewRequest("GET", "http://v4.ident.me", nil)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	re, _ := ioutil.ReadAll(resp.Body)
-
-	if resp.StatusCode != 200 {
-		logger.Warn("Invalid request: ", string(re))
-		return wanIp, errors.New(string(re))
-	} else {
-		wanIp = string(re)
-		wanIp = strings.Replace(wanIp, "", "", -1)
-		wanIp = strings.Replace(wanIp, "\n", "", -1)
-	}
-	return wanIp, err
-}
-
 func run(uci NewUCI) {
-	uci.AppEnabled()
+	// uci.AppEnabled()
+	koiAliddns, err := uci.GetKoiAliDdns()
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+	if koiAliddns.Enabled == false {
+		logger.Errorf(`%s: app was not enabled to running, check config file`, time.Now().Format("2006-01-02 15:04:05 +0800"))
+		os.Exit(1)
+	}
+
 	logger.Infof(`%s: koifq alidns check start`, time.Now().Format("2006-01-02 15:04:05 +0800"))
 
 	aksk, err := uci.GetAKSK()
@@ -367,7 +476,6 @@ func run(uci NewUCI) {
 		logger.Error(err)
 		return
 	}
-
 	switch {
 	case len(updates) > 0:
 		ali.UpdateDNS(updates)
@@ -413,14 +521,9 @@ func main() {
 		}
 		os.Exit(0)
 	}
-	ip, err := GetwanIP()
-	if err != nil {
-		logger.Error(err)
-		return
-	}
+
 	uci := NewUCI{
-		WANIP: ip,
-		UCI:   uci.NewTree(file),
+		UCI: uci.NewTree(file),
 	}
 
 	//第一次运行在5秒后，后续每5分钟一次
