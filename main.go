@@ -3,12 +3,14 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
@@ -27,11 +29,8 @@ type Flags struct {
 var file = "/etc/config"
 
 var show = `
-create config like this
-k@k-ThinkPad-P15-Gen-1:~$ cat /etc/config/koiAliddns
-config cron
-    #At every 20th minute
-    option time "0 */20 * * * *"
+config koiAliddns
+    option enabled "1"
 
 config auth
 	option ak "xxxxxxxxxxxx"
@@ -39,6 +38,14 @@ config auth
 
 config host
 	option rr "abc"
+	option type "A"
+	option ttl "600"
+	option priority "1"
+	option line "default"
+	option domain "wuxuxing.com"
+
+config host
+	option rr "efg"
 	option type "A"
 	option ttl "600"
 	option priority "1"
@@ -70,9 +77,28 @@ type NewUCI struct {
 func parseFlags() *Flags {
 	argsflag := new(Flags)
 	flag.StringVar(&argsflag.file, "f", file, "config dir, default /etc/config")
-	flag.StringVar(&argsflag.show, "s", show, "show config demo")
+	flag.StringVar(&argsflag.show, "c", "0", "create sample config demo to /etc/config/koiAliddns, use value 1")
 	flag.Parse()
 	return argsflag
+}
+
+func (i *NewUCI) AppEnabled() {
+	var enabled bool
+	if value, ok := i.UCI.Get("koiAliddns", "@koiAliddns[0]", "enabled"); ok {
+		e, _ := strconv.Atoi(value[0])
+		if e == 1 {
+			enabled = true
+		} else {
+			enabled = false
+		}
+	} else {
+		enabled = false
+	}
+
+	if enabled == false {
+		logger.Error("app was not able to running, change the config")
+		os.Exit(1)
+	}
 }
 
 func (i *NewUCI) GetAKSK() (AKSK, error) {
@@ -321,7 +347,7 @@ func GetwanIP() (string, error) {
 }
 
 func run(uci NewUCI) {
-	// loc, _ := time.LoadLocation("Asia/ShangHai")
+	uci.AppEnabled()
 	logger.Infof(`%s: koifq alidns check start`, time.Now().Format("2006-01-02 15:04:05 +0800"))
 
 	aksk, err := uci.GetAKSK()
@@ -360,8 +386,32 @@ func init() {
 
 func main() {
 	argsflag := parseFlags()
-
 	file := argsflag.file
+
+	configFile := fmt.Sprintf(`%s/%s`, file, "koiAliddns")
+	if argsflag.show == "1" {
+		if _, err := os.Stat(file); err != nil {
+			if err := os.Mkdir(file, os.ModePerm); err != nil {
+				logger.Error(err)
+				os.Exit(1)
+			}
+		}
+		if _, err := os.Stat(configFile); err != nil {
+			f, err := os.Create(configFile)
+			if err != nil {
+				logger.Error(err)
+				os.Exit(1)
+			}
+			defer f.Close()
+			if _, err := f.WriteString(show); err != nil {
+				logger.Error(err)
+				os.Exit(1)
+			} else {
+				logger.Infof(`create %s successed`, configFile)
+			}
+		}
+		os.Exit(0)
+	}
 	ip, err := GetwanIP()
 	if err != nil {
 		logger.Error(err)
