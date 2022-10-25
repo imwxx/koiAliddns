@@ -32,10 +32,10 @@ var file = "/etc/config"
 
 var show = `
 config koiAliddns
-        option enabled '1'
-		# 指定被获取IP的网卡地址，非必须；没配置的话，走http://myip.ipip.net/json
-        # option eth "enp0s31f6"
-        option ipv46 "ipv4"
+	option enabled '1'
+	# 指定被获取IP的网卡地址，非必须；没配置的话，走http://myip.ipip.net/json
+	# option eth "enp0s31f6"
+	option ipv46 "ipv4"
 
 config auth
 	option ak "xxxxxxxxxxxx"
