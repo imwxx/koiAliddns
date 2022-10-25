@@ -285,6 +285,8 @@ func (i *AKSK) UpdateDNS(hosts []Hosts) (err error) {
 			logger.Error(response)
 			return err
 		}
+		logger.Infof(`%s: koifq alidns updated, RR: %s, Domain: %s, Type: %s, Value:%s, TTL: %s, Prioriy: %s, Line: %s`, time.Now().Format("2006-01-02 15:04:05 +0800"), request.RR, host.DOMAIN, request.Type, request.Value, request.TTL, request.Priority, request.Line)
+
 	}
 
 	return nil
@@ -319,6 +321,7 @@ func (i *AKSK) AddDNS(hosts []Hosts) (err error) {
 			logger.Error(response)
 			return err
 		}
+		logger.Infof(`%s: koifq alidns added, RR: %s, Domain: %s, Type: %s, Value:%s, TTL: %s, Prioriy: %s, Line: %s`, time.Now().Format("2006-01-02 15:04:05 +0800"), request.RR, request.DomainName, request.Type, request.Value, request.TTL, request.Priority, request.Line)
 	}
 
 	return nil
@@ -367,10 +370,8 @@ func run(uci NewUCI) {
 
 	switch {
 	case len(updates) > 0:
-		logger.Infof(`%s: koifq alidns update, affected: %d`, time.Now().Format("2006-01-02 15:04:05 +0800"), len(updates))
 		ali.UpdateDNS(updates)
 	case len(adds) > 0:
-		logger.Infof(`%s: koifq alidns add, affected: %d`, time.Now().Format("2006-01-02 15:04:05 +0800"), len(updates))
 		ali.AddDNS(adds)
 	default:
 		logger.Infof(`%s: koifq alidns check end, no new records`, time.Now().Format("2006-01-02 15:04:05 +0800"))
@@ -422,10 +423,13 @@ func main() {
 		UCI:   uci.NewTree(file),
 	}
 
+	//第一次运行在5秒后，后续每5分钟一次
+	t := 5 * time.Second
 	for {
 		go func(uci NewUCI) {
 			run(uci)
 		}(uci)
-		time.Sleep(5 * 60 * time.Second)
+		time.Sleep(t)
+		t = 5 * 60 * time.Second
 	}
 }
