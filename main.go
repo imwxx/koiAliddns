@@ -21,7 +21,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var logger *logrus.Logger
+var stdOut *logrus.Logger
+var stdErr *logrus.Logger
 
 type Flags struct {
 	file string
@@ -248,7 +249,7 @@ func (i *NewUCI) GetwanIP(koialiddns KoiAliDdns) (map[string]string, error) {
 		re, _ := ioutil.ReadAll(resp.Body)
 
 		if resp.StatusCode != 200 {
-			logger.Warn("Invalid request: ", string(re))
+			stdErr.Warn("Invalid request: ", string(re))
 			return wanIp, errors.New(string(re))
 		} else {
 			var b MyipipipNet
@@ -403,10 +404,10 @@ func (i *AKSK) UpdateDNS(hosts []Hosts) (err error) {
 
 		response, err := client.UpdateDomainRecord(request)
 		if err != nil {
-			logger.Error(response)
+			stdErr.Error(response)
 			return err
 		}
-		logger.Infof(`%s: koifq alidns updated, RR: %s, Domain: %s, Type: %s, Value:%s, TTL: %s, Prioriy: %s, Line: %s`, time.Now().Format("2006-01-02 15:04:05 +0800"), request.RR, host.DOMAIN, request.Type, request.Value, request.TTL, request.Priority, request.Line)
+		stdOut.Infof(`%s: koifq alidns updated, RR: %s, Domain: %s, Type: %s, Value:%s, TTL: %s, Prioriy: %s, Line: %s`, time.Now().Format("2006-01-02 15:04:05 +0800"), request.RR, host.DOMAIN, request.Type, request.Value, request.TTL, request.Priority, request.Line)
 
 	}
 
@@ -439,10 +440,10 @@ func (i *AKSK) AddDNS(hosts []Hosts) (err error) {
 
 		response, err := client.AddDomainRecord(request)
 		if err != nil {
-			logger.Error(response)
+			stdErr.Error(response)
 			return err
 		}
-		logger.Infof(`%s: koifq alidns added, RR: %s, Domain: %s, Type: %s, Value:%s, TTL: %s, Prioriy: %s, Line: %s`, time.Now().Format("2006-01-02 15:04:05 +0800"), request.RR, request.DomainName, request.Type, request.Value, request.TTL, request.Priority, request.Line)
+		stdOut.Infof(`%s: koifq alidns added, RR: %s, Domain: %s, Type: %s, Value:%s, TTL: %s, Prioriy: %s, Line: %s`, time.Now().Format("2006-01-02 15:04:05 +0800"), request.RR, request.DomainName, request.Type, request.Value, request.TTL, request.Priority, request.Line)
 	}
 
 	return nil
@@ -452,19 +453,19 @@ func run(uci NewUCI) {
 	// uci.AppEnabled()
 	koiAliddns, err := uci.GetKoiAliDdns()
 	if err != nil {
-		logger.Error(err)
+		stdErr.Error(err)
 		return
 	}
 	if koiAliddns.Enabled == false {
-		logger.Errorf(`%s: app was not enabled to running, check config file`, time.Now().Format("2006-01-02 15:04:05 +0800"))
+		stdErr.Errorf(`%s: app was not enabled to running, check config file`, time.Now().Format("2006-01-02 15:04:05 +0800"))
 		os.Exit(1)
 	}
 
-	logger.Infof(`%s: koifq alidns check start`, time.Now().Format("2006-01-02 15:04:05 +0800"))
+	stdOut.Infof(`%s: koifq alidns check start`, time.Now().Format("2006-01-02 15:04:05 +0800"))
 
 	aksk, err := uci.GetAKSK()
 	if err != nil {
-		logger.Error(err)
+		stdErr.Error(err)
 		return
 	}
 	ali := AKSK{
@@ -473,7 +474,7 @@ func run(uci NewUCI) {
 	}
 	updates, adds, err := uci.HostsHandler()
 	if err != nil {
-		logger.Error(err)
+		stdErr.Error(err)
 		return
 	}
 	switch {
@@ -482,15 +483,21 @@ func run(uci NewUCI) {
 	case len(adds) > 0:
 		ali.AddDNS(adds)
 	default:
-		logger.Infof(`%s: koifq alidns check end, no new records`, time.Now().Format("2006-01-02 15:04:05 +0800"))
+		stdOut.Infof(`%s: koifq alidns check end, no new records`, time.Now().Format("2006-01-02 15:04:05 +0800"))
 	}
 }
 
 func init() {
-	logger = logrus.New()
-	logger.Formatter = &logrus.JSONFormatter{}
-	logger.Level = logrus.InfoLevel
-	logger.Out = os.Stderr
+	stdErr = logrus.New()
+	stdErr.Formatter = &logrus.JSONFormatter{}
+	stdErr.Level = logrus.InfoLevel
+	stdErr.Out = os.Stderr
+
+	stdOut = logrus.New()
+	stdOut.Formatter = &logrus.JSONFormatter{}
+	stdOut.Level = logrus.InfoLevel
+	stdOut.Out = os.Stdout
+
 }
 
 func main() {
@@ -501,22 +508,22 @@ func main() {
 	if argsflag.show == "1" {
 		if _, err := os.Stat(file); err != nil {
 			if err := os.Mkdir(file, os.ModePerm); err != nil {
-				logger.Error(err)
+				stdErr.Error(err)
 				os.Exit(1)
 			}
 		}
 		if _, err := os.Stat(configFile); err != nil {
 			f, err := os.Create(configFile)
 			if err != nil {
-				logger.Error(err)
+				stdErr.Error(err)
 				os.Exit(1)
 			}
 			defer f.Close()
 			if _, err := f.WriteString(show); err != nil {
-				logger.Error(err)
+				stdErr.Error(err)
 				os.Exit(1)
 			} else {
-				logger.Infof(`create %s successed`, configFile)
+				stdOut.Infof(`create %s successed`, configFile)
 			}
 		}
 		os.Exit(0)
