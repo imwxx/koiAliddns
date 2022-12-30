@@ -33,6 +33,7 @@ var file = "/etc/config"
 
 var show = `
 config koiAliddns
+	option cron 300
 	option enabled '1'
 	# 指定被获取IP的网卡地址，非必须；没配置的话，走http://myip.ipip.net/json
 	# option eth "enp0s31f6"
@@ -79,6 +80,7 @@ type Hosts struct {
 }
 
 type KoiAliDdns struct {
+	Cron    int
 	Enabled bool
 	Eth     string
 	Myipapi string
@@ -105,6 +107,19 @@ func parseFlags() *Flags {
 func (i *NewUCI) GetKoiAliDdns() (KoiAliDdns, error) {
 	var data KoiAliDdns
 	var enabled bool
+
+	if value, ok := i.UCI.Get("koiAliddns", "@koiAliddns[0]", "cron"); ok {
+		if t, err := strconv.Atoi(value[0]); err == nil {
+			if t <= 60 {
+				return data, errors.New(fmt.Sprintf(`option cron %s, setting less than 60 second`, value[0]))
+			} else {
+				data.Cron = t
+			}
+		} else {
+			data.Cron = 300
+		}
+	}
+
 	if value, ok := i.UCI.Get("koiAliddns", "@koiAliddns[0]", "enabled"); ok {
 		e, _ := strconv.Atoi(value[0])
 		if e == 1 {
@@ -407,7 +422,7 @@ func (i *AKSK) UpdateDNS(hosts []Hosts) (err error) {
 			stdErr.Error(response)
 			return err
 		}
-		stdOut.Infof(`%s: koifq alidns updated, RR: %s, Domain: %s, Type: %s, Value:%s, TTL: %s, Prioriy: %s, Line: %s`, time.Now().Format("2006-01-02 15:04:05 +0800"), request.RR, host.DOMAIN, request.Type, request.Value, request.TTL, request.Priority, request.Line)
+		stdOut.Infof(`koifq alidns updated, RR: %s, Domain: %s, Type: %s, Value:%s, TTL: %s, Prioriy: %s, Line: %s`, request.RR, host.DOMAIN, request.Type, request.Value, request.TTL, request.Priority, request.Line)
 
 	}
 
@@ -443,7 +458,7 @@ func (i *AKSK) AddDNS(hosts []Hosts) (err error) {
 			stdErr.Error(response)
 			return err
 		}
-		stdOut.Infof(`%s: koifq alidns added, RR: %s, Domain: %s, Type: %s, Value:%s, TTL: %s, Prioriy: %s, Line: %s`, time.Now().Format("2006-01-02 15:04:05 +0800"), request.RR, request.DomainName, request.Type, request.Value, request.TTL, request.Priority, request.Line)
+		stdOut.Infof(`koifq alidns added, RR: %s, Domain: %s, Type: %s, Value:%s, TTL: %s, Prioriy: %s, Line: %s`, request.RR, request.DomainName, request.Type, request.Value, request.TTL, request.Priority, request.Line)
 	}
 
 	return nil
@@ -457,11 +472,11 @@ func run(uci NewUCI) {
 		return
 	}
 	if koiAliddns.Enabled == false {
-		stdErr.Errorf(`%s: app was not enabled to running, check config file`, time.Now().Format("2006-01-02 15:04:05 +0800"))
+		stdErr.Error(`app was not enabled to running, check config file`)
 		os.Exit(1)
 	}
 
-	stdOut.Infof(`%s: koifq alidns check start`, time.Now().Format("2006-01-02 15:04:05 +0800"))
+	stdOut.Info(`koifq alidns check start`)
 
 	aksk, err := uci.GetAKSK()
 	if err != nil {
@@ -483,8 +498,11 @@ func run(uci NewUCI) {
 	case len(adds) > 0:
 		ali.AddDNS(adds)
 	default:
-		stdOut.Infof(`%s: koifq alidns check end, no new records`, time.Now().Format("2006-01-02 15:04:05 +0800"))
+		stdOut.Info(`koifq alidns check end, no new records`)
 	}
+
+	t := time.Duration(koiAliddns.Cron) * time.Second
+	time.Sleep(t)
 }
 
 func init() {
@@ -539,7 +557,9 @@ func main() {
 		go func(uci NewUCI) {
 			run(uci)
 		}(uci)
-		time.Sleep(t)
-		t = 5 * 60 * time.Second
+		if t > 0 {
+			time.Sleep(t)
+			t = 0
+		}
 	}
 }
