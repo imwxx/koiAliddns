@@ -21,9 +21,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var stdOut *logrus.Logger
-var stdErr *logrus.Logger
-
 type Flags struct {
 	file string
 	show string
@@ -96,6 +93,12 @@ type NewUCI struct {
 	UCI uci.Tree
 }
 
+var (
+	stdOut *logrus.Logger
+	stdErr *logrus.Logger
+	kuci   NewUCI
+)
+
 func parseFlags() *Flags {
 	argsflag := new(Flags)
 	flag.StringVar(&argsflag.file, "f", file, "config dir, default /etc/config")
@@ -110,7 +113,7 @@ func (i *NewUCI) GetKoiAliDdns() (KoiAliDdns, error) {
 
 	if value, ok := i.UCI.Get("koiAliddns", "@koiAliddns[0]", "cron"); ok {
 		if t, err := strconv.Atoi(value[0]); err == nil {
-			if t <= 60 {
+			if t < 60 {
 				return data, errors.New(fmt.Sprintf(`option cron %s, setting less than 60 second`, value[0]))
 			} else {
 				data.Cron = t
@@ -464,47 +467,6 @@ func (i *AKSK) AddDNS(hosts []Hosts) (err error) {
 	return nil
 }
 
-func run(uci NewUCI) {
-	// uci.AppEnabled()
-	koiAliddns, err := uci.GetKoiAliDdns()
-	if err != nil {
-		stdErr.Error(err)
-		return
-	}
-	if koiAliddns.Enabled == false {
-		stdErr.Error(`app was not enabled to running, check config file`)
-		os.Exit(1)
-	}
-
-	stdOut.Info(`koifq alidns check start`)
-
-	aksk, err := uci.GetAKSK()
-	if err != nil {
-		stdErr.Error(err)
-		return
-	}
-	ali := AKSK{
-		AK: aksk.AK,
-		SK: aksk.SK,
-	}
-	updates, adds, err := uci.HostsHandler()
-	if err != nil {
-		stdErr.Error(err)
-		return
-	}
-	switch {
-	case len(updates) > 0:
-		ali.UpdateDNS(updates)
-	case len(adds) > 0:
-		ali.AddDNS(adds)
-	default:
-		stdOut.Info(`koifq alidns check end, no new records`)
-	}
-
-	t := time.Duration(koiAliddns.Cron) * time.Second
-	time.Sleep(t)
-}
-
 func init() {
 	stdErr = logrus.New()
 	stdErr.Formatter = &logrus.JSONFormatter{}
@@ -518,10 +480,7 @@ func init() {
 
 }
 
-func main() {
-	argsflag := parseFlags()
-	file := argsflag.file
-
+func initconf(argsflag *Flags) {
 	configFile := fmt.Sprintf(`%s/%s`, file, "koiAliddns")
 	if argsflag.show == "1" {
 		if _, err := os.Stat(file); err != nil {
@@ -546,20 +505,63 @@ func main() {
 		}
 		os.Exit(0)
 	}
+}
 
-	uci := NewUCI{
+func run() {
+	stdOut.Info(`koifq alidns check start`)
+	aksk, err := kuci.GetAKSK()
+	if err != nil {
+		stdErr.Error(err)
+		return
+	}
+	ali := AKSK{
+		AK: aksk.AK,
+		SK: aksk.SK,
+	}
+	updates, adds, err := kuci.HostsHandler()
+	if err != nil {
+		stdErr.Error(err)
+		return
+	}
+	switch {
+	case len(updates) > 0:
+		ali.UpdateDNS(updates)
+	case len(adds) > 0:
+		ali.AddDNS(adds)
+	default:
+		stdOut.Info(`koifq alidns check end, no new records`)
+	}
+}
+
+func koiCron() {
+	// uci.AppEnabled()
+	koiAliddns, err := kuci.GetKoiAliDdns()
+	if err != nil {
+		stdErr.Error(err)
+		return
+	}
+	if koiAliddns.Enabled == false {
+		stdErr.Error(`app was not enabled to running, check config file`)
+		os.Exit(1)
+	}
+
+	for {
+		run()
+		t := time.Duration(koiAliddns.Cron) * time.Second
+		time.Sleep(t)
+	}
+}
+
+func main() {
+	argsflag := parseFlags()
+	file := argsflag.file
+
+	kuci = NewUCI{
 		UCI: uci.NewTree(file),
 	}
 
-	//第一次运行在5秒后，后续每5分钟一次
-	t := 5 * time.Second
-	for {
-		go func(uci NewUCI) {
-			run(uci)
-		}(uci)
-		if t > 0 {
-			time.Sleep(t)
-			t = 0
-		}
-	}
+	initconf(argsflag)
+
+	koiCron()
+	select {}
 }
