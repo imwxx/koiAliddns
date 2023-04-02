@@ -11,13 +11,13 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/alidns"
 	"github.com/digineo/go-uci"
+	"github.com/jasonlvhit/gocron"
 	"github.com/sirupsen/logrus"
 )
 
@@ -545,11 +545,9 @@ func koiCron() {
 		os.Exit(1)
 	}
 
-	for {
-		run()
-		t := time.Duration(koiAliddns.Cron) * time.Second
-		time.Sleep(t)
-	}
+	s := gocron.NewScheduler()
+	s.Every(uint64(koiAliddns.Cron)).Seconds().Do(run)
+	<-s.Start()
 }
 
 func main() {

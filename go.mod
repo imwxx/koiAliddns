@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/aliyun/alibaba-cloud-sdk-go v1.62.266
 	github.com/digineo/go-uci v0.0.0-20210918132103-37c7b10c14fa
+	github.com/jasonlvhit/gocron v0.0.1
 	github.com/sirupsen/logrus v1.9.0
 )
 
